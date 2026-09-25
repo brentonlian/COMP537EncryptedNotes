@@ -45,3 +45,32 @@ for title in kvs:
     error('get mismatch for title %s (received values %s and %s)' % (title, note1, note2))
 
 print('Testing complete')
+
+print('Testing incorrect password')
+
+try:
+    bad_notes = PrivNotes('wrongpassword', data, checksum)
+    error('incorrect password was accepted')
+except ValueError:
+    print('success!')
+
+
+print('Testing incorrect checksum')
+
+try:
+    bad_notes = PrivNotes('123456', data, '00')
+    error('incorrect checksum was accepted')
+except ValueError:
+    print('success!')
+
+
+print('Testing maximum note length')
+
+try:
+    priv_notes.set('Too Long', 'a' * 2049)
+    error('note longer than 2048 characters was accepted')
+except ValueError:
+    print('success!')
+
+
+print('Additional basic tests complete')
