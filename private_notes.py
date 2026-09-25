@@ -29,7 +29,7 @@ class PrivNotes:
 
     #New database
     if data is None:
-      self.kvs = pickle.loads(bytes.fromhex(data))
+      self.salt = os.urandom(16)
 
     else:
       try:
@@ -39,8 +39,8 @@ class PrivNotes:
           digest = hashes.Hash(hashes.SHA256())
           digest.update(raw)
 
-          if digest.finalize().hex() != checksum:
-            raise ValueError("Invalid checksum")
+        if digest.finalize().hex() != checksum:
+          raise ValueError("Invalid checksum")
 
         saved = pickle.loads(raw)
 
@@ -53,38 +53,38 @@ class PrivNotes:
         raise ValueError("Malformed serialized format")
 
      # PBKDF2 is called exactly once
-      kdf = PBKDF2HMAC(
+    kdf = PBKDF2HMAC(
           algorithm=hashes.SHA256(),
           length=32,
           salt=self.salt,
           iterations=2000000
       )
 
-      source_key = kdf.derive(bytes(password, "ascii"))
+    source_key = kdf.derive(bytes(password, "ascii"))
 
       # Derive several keys from the one PBKDF2 key
-      self.title_key = self._hmac(source_key, b"title")
-      self.enc_key = self._hmac(source_key, b"encryption")
-      self.nonce_key = self._hmac(source_key, b"nonce")
-      self.check_key = self._hmac(source_key, b"password")
+    self.title_key = self._hmac(source_key, b"title")
+    self.enc_key = self._hmac(source_key, b"encryption")
+    self.nonce_key = self._hmac(source_key, b"nonce")
+    self.check_key = self._hmac(source_key, b"password")
 
-      self.password_check = self._hmac(
+    self.password_check = self._hmac(
           self.check_key,
           b"password-check"
-      )
+    )
 
-      # When loading, immediately verify the password
-      if data is not None:
-          if self.password_check != stored_password_check:
-              raise ValueError("Incorrect password")
+    # When loading, immediately verify the password
+    if data is not None:
+        if self.password_check != stored_password_check:
+            raise ValueError("Incorrect password")
 
-          # Make sure every encrypted note is valid
-          try:
-              for title_key in self.kvs:
-                  note_counter, ciphertext = self.kvs[title_key]
-                  self._decrypt(title_key, note_counter, ciphertext)
-          except Exception:
-              raise ValueError("Tampered data")
+        # Make sure every encrypted note is valid
+    try:
+      for title_key in self.kvs:
+        note_counter, ciphertext = self.kvs[title_key]
+        self._decrypt(title_key, note_counter, ciphertext)
+    except Exception:
+      raise ValueError("Tampered data")
    
 
   def dump(self):
@@ -149,3 +149,9 @@ class PrivNotes:
       return True
 
     return False
+
+  #Add hmac class
+  def _hmac(self, key, message):
+    h = hmac.HMAC(key, hashes.SHA256())
+    h.update(message)
+    return h.finalize()
