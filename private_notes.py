@@ -79,12 +79,12 @@ class PrivNotes:
             raise ValueError("Incorrect password")
 
         # Make sure every encrypted note is valid
-    try:
-      for title_key in self.kvs:
-        note_counter, ciphertext = self.kvs[title_key]
-        self._decrypt(title_key, note_counter, ciphertext)
-    except Exception:
-      raise ValueError("Tampered data")
+    #try:
+      #for title_key in self.kvs:
+        #note_counter, ciphertext = self.kvs[title_key]
+        #self._decrypt(title_key, note_counter, ciphertext)
+    #except Exception:
+      #raise ValueError("Tampered data")
    
 
   def dump(self):
@@ -97,7 +97,21 @@ class PrivNotes:
       checksum (str) : a hex-encoded checksum for the data used to protect
                        against rollback attacks (up to 32 characters in length)
     """
-    return pickle.dumps(self.kvs).hex(), ''
+    saved = {
+      "salt": self.salt,
+      "kvs": self.kvs,
+      "counter": self.counter,
+      "password_check": self.password_check
+    }
+
+    raw = pickle.dumps(saved)
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(raw)
+    checksum = digest.finalize().hex()
+
+    return raw.hex(), checksum
+
+    
 
   def get(self, title):
     """Fetches the note associated with a title.
