@@ -2,6 +2,8 @@ from private_notes import PrivNotes
 
 import re
 
+import pickle
+
 def error(s):
   print('=== ERROR: %s' % s)
 
@@ -71,6 +73,79 @@ try:
     error('note longer than 2048 characters was accepted')
 except ValueError:
     print('success!')
+
+print('Testing ciphertext tampering')
+
+tampered_saved = pickle.loads(bytes.fromhex(data))
+
+first_title = next(iter(tampered_saved["kvs"]))
+
+counter, ciphertext = tampered_saved["kvs"][first_title]
+
+# Change one byte of ciphertext
+tampered_ciphertext = bytearray(ciphertext)
+tampered_ciphertext[0] ^= 1
+
+tampered_saved["kvs"][first_title] = (
+    counter,
+    bytes(tampered_ciphertext)
+)
+
+tampered_data = pickle.dumps(tampered_saved).hex()
+
+try:
+    bad_notes = PrivNotes(
+        '123456',
+        tampered_data,
+        None
+    )
+
+    error('accepted tampered ciphertext')
+
+except ValueError:
+    print('success!')
+
+print('Testing swap attack')
+
+swap_saved = pickle.loads(bytes.fromhex(data))
+
+titles = list(swap_saved["kvs"].keys())
+
+if len(titles) >= 2:
+
+    first = titles[0]
+    second = titles[1]
+
+    swap_saved["kvs"][first], swap_saved["kvs"][second] = (
+        swap_saved["kvs"][second],
+        swap_saved["kvs"][first]
+    )
+
+    swap_data = pickle.dumps(swap_saved).hex()
+
+    try:
+        bad_notes = PrivNotes(
+            '123456',
+            swap_data,
+            None
+        )
+
+        error('accepted swapped records')
+
+    except ValueError:
+        print('success!')
+
+print('Testing plaintext hiding')
+
+raw_data = bytes.fromhex(data)
+
+if b'Secrets' in raw_data:
+    error('plaintext title found in serialized data')
+
+if b'The secret word is bananas.' in raw_data:
+    error('plaintext note found in serialized data')
+
+print('success!')
 
 
 print('Additional basic tests complete')
