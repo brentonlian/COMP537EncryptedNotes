@@ -78,13 +78,13 @@ class PrivNotes:
         if self.password_check != stored_password_check:
             raise ValueError("Incorrect password")
 
-        # Make sure every encrypted note is valid
-    #try:
-      #for title_key in self.kvs:
-        #note_counter, ciphertext = self.kvs[title_key]
-        #self._decrypt(title_key, note_counter, ciphertext)
-    #except Exception:
-      #raise ValueError("Tampered data")
+        #Make sure every encrypted note is valid
+    try:
+      for title_key in self.kvs:
+        note_counter, ciphertext = self.kvs[title_key]
+        self._decrypt(title_key, note_counter, ciphertext)
+    except Exception:
+      raise ValueError("Tampered data")
    
 
   def dump(self):
@@ -123,8 +123,18 @@ class PrivNotes:
       note (str) : the note associated with the requested title if
                        it exists and otherwise None
     """
-    if title in self.kvs:
-      return self.kvs[title]
+    title_token = self._title_token(title)
+
+    if title_token in self.kvs:
+
+        counter, ciphertext = self.kvs[title_token]
+
+        return self._decrypt(
+            title_token,
+            counter,
+            ciphertext
+        )
+
     return None
 
   def set(self, title, note):
@@ -142,10 +152,23 @@ class PrivNotes:
        Raises:
          ValueError : if note length exceeds the maximum
     """
-    if len(note) > self.MAX_NOTE_LEN:
-      raise ValueError('Maximum note length exceeded')
-    
-    self.kvs[title] = note
+    if len(bytes(note, "ascii")) > self.MAX_NOTE_LEN:
+      raise ValueError("Maximum note length exceeded")
+
+    title_token = self._title_token(title)
+
+    ciphertext = self._encrypt(
+        title_token,
+        note,
+        self.counter
+    )
+
+    self.kvs[title_token] = (
+        self.counter,
+        ciphertext
+    )
+
+    self.counter += 1
 
 
   def remove(self, title):
@@ -158,9 +181,11 @@ class PrivNotes:
          success (bool) : True if the title was removed and False if the title was
                           not found
     """
-    if title in self.kvs:
-      del self.kvs[title]
-      return True
+    title_token = self._title_token(title)
+
+    if title_token in self.kvs:
+        del self.kvs[title_token]
+        return True
 
     return False
 
@@ -169,3 +194,69 @@ class PrivNotes:
     h = hmac.HMAC(key, hashes.SHA256())
     h.update(message)
     return h.finalize()
+
+  def _title_token(self, title):
+    # Hide the real title using HMAC
+    return self._hmac(
+        self.title_key,
+        bytes(title, "ascii")
+    )
+
+
+  def _nonce(self, counter):
+      # Derive a 12-byte nonce from the counter
+      # rather than using new external randomness
+      counter_bytes = counter.to_bytes(8, "little")
+
+      return self._hmac(
+          self.nonce_key,
+          counter_bytes
+      )[:12]
+
+
+  def _encrypt(self, title_token, note, counter):
+      note_bytes = bytes(note, "ascii")
+
+      # Store the real length in the first two bytes
+      length = len(note_bytes).to_bytes(2, "little")
+
+      # Pad every note to exactly MAX_NOTE_LEN bytes
+      padding = b"\x00" * (self.MAX_NOTE_LEN - len(note_bytes))
+
+      plaintext = length + note_bytes + padding
+
+      # Bind the ciphertext to the title and counter.
+      # This also helps prevent swap attacks.
+      aad = title_token + counter.to_bytes(8, "little")
+
+      return AESGCM(self.enc_key).encrypt(
+          self._nonce(counter),
+          plaintext,
+          aad
+      )
+
+
+  def _decrypt(self, title_token, counter, ciphertext):
+
+      aad = title_token + counter.to_bytes(8, "little")
+
+      try:
+          plaintext = AESGCM(self.enc_key).decrypt(
+              self._nonce(counter),
+              ciphertext,
+              aad
+          )
+
+      except InvalidTag:
+          raise ValueError("Invalid ciphertext")
+
+      # First two bytes tell us the real note length
+      note_length = int.from_bytes(
+          plaintext[:2],
+          "little"
+      )
+
+      if note_length > self.MAX_NOTE_LEN:
+          raise ValueError("Invalid note")
+
+      return plaintext[2:2 + note_length].decode("ascii")
