@@ -39,15 +39,15 @@ class PrivNotes:
           digest = hashes.Hash(hashes.SHA256())
           digest.update(raw)
 
-        if digest.finalize().hex() != checksum:
-          raise ValueError("Invalid checksum")
+          if digest.finalize().hex() != checksum:
+            raise ValueError("Invalid checksum")
 
         saved = pickle.loads(raw)
 
         self.salt = saved["salt"]
         self.kvs = saved["kvs"]
         self.counter = saved["counter"]
-        stored_password_check = saved["password_check"]
+        stored_metadata_tag = saved["metadata_tag"]
 
       except Exception:
         raise ValueError("Malformed serialized format")
@@ -68,23 +68,18 @@ class PrivNotes:
     self.nonce_key = self._hmac(source_key, b"nonce")
     self.check_key = self._hmac(source_key, b"password")
 
-    self.password_check = self._hmac(
-          self.check_key,
-          b"password-check"
-    )
-
     # When loading, immediately verify the password
     if data is not None:
-        if self.password_check != stored_password_check:
-            raise ValueError("Incorrect password")
+      if self._metadata_tag() != stored_metadata_tag:
+        raise ValueError("Incorrect password or tampered metadata")
 
         #Make sure every encrypted note is valid
-    try:
-      for title_key in self.kvs:
-        note_counter, ciphertext = self.kvs[title_key]
-        self._decrypt(title_key, note_counter, ciphertext)
-    except Exception:
-      raise ValueError("Tampered data")
+      try:
+        for title_key in self.kvs:
+          note_counter, ciphertext = self.kvs[title_key]
+          self._decrypt(title_key, note_counter, ciphertext)
+      except Exception:
+        raise ValueError("Tampered data")
    
 
   def dump(self):
@@ -101,7 +96,7 @@ class PrivNotes:
       "salt": self.salt,
       "kvs": self.kvs,
       "counter": self.counter,
-      "password_check": self.password_check
+      "metadata_tag": self._metadata_tag()
     }
 
     raw = pickle.dumps(saved)
@@ -152,6 +147,10 @@ class PrivNotes:
        Raises:
          ValueError : if note length exceeds the maximum
     """
+
+    if self.counter >= 2**64:
+      raise ValueError("Maximum number of updates exceeded")
+  
     if len(bytes(note, "ascii")) > self.MAX_NOTE_LEN:
       raise ValueError("Maximum note length exceeded")
 
@@ -260,3 +259,11 @@ class PrivNotes:
           raise ValueError("Invalid note")
 
       return plaintext[2:2 + note_length].decode("ascii")
+
+  def _metadata_tag(self):
+    return self._hmac(
+        self.check_key,
+        b"metadata"
+        + self.salt
+        + self.counter.to_bytes(8, "little")
+    )

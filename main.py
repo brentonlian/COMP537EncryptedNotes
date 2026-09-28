@@ -147,5 +147,25 @@ if b'The secret word is bananas.' in raw_data:
 
 print('success!')
 
+print('Testing counter tampering')
+
+counter_saved = pickle.loads(bytes.fromhex(data))
+
+counter_saved["counter"] = 0
+
+counter_data = pickle.dumps(counter_saved).hex()
+
+try:
+    bad_notes = PrivNotes(
+        '123456',
+        counter_data,
+        None
+    )
+
+    error('accepted modified counter')
+
+except ValueError:
+    print('success!')
+
 
 print('Additional basic tests complete')
