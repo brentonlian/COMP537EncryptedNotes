@@ -1,3 +1,4 @@
+#Group members: Brenton Lian, Akksharvan Senthilkumar
 import pickle
 import os
 
@@ -48,6 +49,21 @@ class PrivNotes:
         self.kvs = saved["kvs"]
         self.counter = saved["counter"]
         stored_metadata_tag = saved["metadata_tag"]
+
+        if not isinstance(self.salt, bytes) or len(self.salt) != 16:
+          raise ValueError("Malformed salt")
+
+        if not isinstance(self.kvs, dict):
+            raise ValueError("Malformed database")
+
+        if not isinstance(self.counter, int):
+            raise ValueError("Malformed counter")
+
+        if self.counter < 0 or self.counter >= 2**64:
+            raise ValueError("Malformed counter")
+
+        if not isinstance(stored_metadata_tag, bytes):
+            raise ValueError("Malformed metadata tag")
 
       except Exception:
         raise ValueError("Malformed serialized format")

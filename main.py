@@ -167,5 +167,91 @@ try:
 except ValueError:
     print('success!')
 
+print('Testing note update')
+
+update_notes = PrivNotes('123456')
+
+update_notes.set('Test', 'first value')
+update_notes.set('Test', 'second value')
+
+if update_notes.get('Test') != 'second value':
+    error('note update failed')
+else:
+    print('success!')
+
+
+print('Testing update after reload')
+
+update_data, update_checksum = update_notes.dump()
+
+reloaded_notes = PrivNotes(
+    '123456',
+    update_data,
+    update_checksum
+)
+
+reloaded_notes.set('Test', 'third value')
+
+if reloaded_notes.get('Test') != 'third value':
+    error('update after reload failed')
+else:
+    print('success!')
+
+print('Testing exactly 2048 bytes')
+
+try:
+    priv_notes.set('Exactly Max', 'a' * 2048)
+
+    if priv_notes.get('Exactly Max') != 'a' * 2048:
+        error('2048-byte note did not decrypt correctly')
+    else:
+        print('success!')
+
+except ValueError:
+    error('2048-byte note was incorrectly rejected')
+
+
+print('Testing load without checksum')
+
+try:
+    no_checksum_notes = PrivNotes(
+        '123456',
+        data,
+        None
+    )
+
+    if no_checksum_notes.get('Idea') != priv_notes.get('Idea'):
+        error('valid load without checksum failed')
+    else:
+        print('success!')
+
+except ValueError:
+    error('valid data was rejected without checksum')
+
+
+print('Testing rollback protection')
+
+rollback_notes = PrivNotes('123456')
+
+rollback_notes.set('Secret', 'old value')
+old_data, old_checksum = rollback_notes.dump()
+
+rollback_notes.set('Secret', 'new value')
+new_data, new_checksum = rollback_notes.dump()
+
+try:
+    # Attacker restores the old database, but trusted storage
+    # still contains the checksum for the current database.
+    bad_notes = PrivNotes(
+        '123456',
+        old_data,
+        new_checksum
+    )
+
+    error('rollback attack was accepted')
+
+except ValueError:
+    print('success!')
+
 
 print('Additional basic tests complete')
