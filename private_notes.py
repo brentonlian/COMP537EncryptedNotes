@@ -276,10 +276,20 @@ class PrivNotes:
 
       return plaintext[2:2 + note_length].decode("ascii")
 
+  def _kvs_hash(self):
+    h = hashes.Hash(hashes.SHA256())
+    for k in sorted(self.kvs.keys()):
+        h.update(k)
+        counter, ciphertext = self.kvs[k]
+        h.update(counter.to_bytes(8, "little"))
+        h.update(ciphertext)
+    return h.finalize()
+
   def _metadata_tag(self):
     return self._hmac(
         self.check_key,
         b"metadata"
         + self.salt
         + self.counter.to_bytes(8, "little")
+        + self._kvs_hash()
     )
